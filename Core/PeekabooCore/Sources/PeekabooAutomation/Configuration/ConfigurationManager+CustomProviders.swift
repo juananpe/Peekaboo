@@ -64,6 +64,11 @@ extension ConfigurationManager {
         do {
             switch provider.type {
             case .openai:
+                // When models are explicitly configured, return them directly
+                // instead of calling the /models endpoint (some providers don't expose it).
+                if let configuredModels = provider.models, !configuredModels.isEmpty {
+                    return (Array(configuredModels.keys), nil)
+                }
                 return try await self.discoverOpenAICompatibleModels(provider: provider, apiKey: apiKey)
             case .anthropic:
                 let configuredModels = provider.models?.keys.map { String($0) } ?? []
@@ -133,6 +138,12 @@ extension ConfigurationManager {
         provider: Configuration.CustomProvider,
         apiKey: String) async throws -> (success: Bool, error: String?)
     {
+        // When models are explicitly configured, some providers don't expose /models.
+        // Fall back to a minimal chat completion test instead.
+        if let configuredModels = provider.models, !configuredModels.isEmpty {
+            return try await self.testOpenAICompatibleChatCompletion(provider: provider, apiKey: apiKey)
+        }
+
         let url = URL(string: "\(provider.options.baseURL)/models")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -149,10 +160,47 @@ extension ConfigurationManager {
 
         guard httpResponse.statusCode == 200 else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
-            return (false, errorMessage)
+            // If /models fails, try chat completions as fallback
+            return try await self.testOpenAICompatibleChatCompletion(provider: provider, apiKey: apiKey)
         }
 
         return (true, nil)
+    }
+
+    private func testOpenAICompatibleChatCompletion(
+        provider: Configuration.CustomProvider,
+        apiKey: String) async throws -> (success: Bool, error: String?)
+    {
+        let url = URL(string: "\(provider.options.baseURL)/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        provider.options.headers?.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Use the first configured model as the test model
+        let testModel = provider.models?.keys.first ?? "default"
+
+        let testPayload: [String: Any] = [
+            "model": testModel,
+            "max_tokens": 10,
+            "messages": [["role": "user", "content": "Hi"]],
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: testPayload)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return (false, "Invalid response")
+        }
+
+        if httpResponse.statusCode < 500 {
+            return (true, nil)
+        }
+
+        let errorMessage = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
+        return (false, errorMessage)
     }
 
     private func testAnthropicCompatibleProvider(

@@ -16,6 +16,7 @@ private final class PeekabooCustomProviderModel: ModelProvider, @unchecked Senda
     let baseURL: String?
     let apiKey: String?
     let additionalHeaders: [String: String]
+    let extraBody: [String: ExtraBodyValue]?
     let capabilities: ModelCapabilities
 
     init(
@@ -25,6 +26,7 @@ private final class PeekabooCustomProviderModel: ModelProvider, @unchecked Senda
         baseURL: String,
         apiKey: String?,
         additionalHeaders: [String: String],
+        extraBody: [String: ExtraBodyValue]? = nil,
         supportsVision: Bool)
     {
         self.providerID = providerID
@@ -34,6 +36,7 @@ private final class PeekabooCustomProviderModel: ModelProvider, @unchecked Senda
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.additionalHeaders = additionalHeaders
+        self.extraBody = extraBody
         self.capabilities = ModelCapabilities(
             supportsVision: supportsVision,
             supportsTools: true,
@@ -76,7 +79,8 @@ private final class PeekabooCustomProviderModel: ModelProvider, @unchecked Senda
             modelId: self.resolvedModelID,
             baseURL: self.baseURL ?? "",
             configuration: self.compatibleConfiguration(),
-            additionalHeaders: self.additionalHeaders)
+            additionalHeaders: self.additionalHeaders,
+            extraBody: self.extraBody)
     }
 
     private func anthropicCompatibleProvider() throws -> AnthropicCompatibleProvider {
@@ -331,6 +335,16 @@ public final class PeekabooAIService {
 
         CustomProviderRegistry.shared.loadFromProfile()
 
+        let extraBody: [String: ExtraBodyValue]? = model?.extraBody?.mapValues { typedValue in
+            switch typedValue {
+            case let .bool(value): .bool(value)
+            case let .int(value): .int(value)
+            case let .double(value): .double(value)
+            case let .string(value): .string(value)
+            default: .string("\(typedValue)")
+            }
+        }
+
         return PeekabooCustomProviderModel(
             providerID: providerID,
             resolvedModelID: resolvedModelID,
@@ -338,6 +352,7 @@ public final class PeekabooAIService {
             baseURL: provider.options.baseURL,
             apiKey: self.resolveCredential(provider.options.apiKey, configuration: configuration),
             additionalHeaders: provider.options.headers ?? [:],
+            extraBody: extraBody,
             supportsVision: model?.supportsVision ?? true)
     }
 

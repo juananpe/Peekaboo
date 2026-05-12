@@ -350,19 +350,22 @@ public struct Configuration: Codable {
         public let supportsTools: Bool?
         public let supportsVision: Bool?
         public let parameters: [String: String]?
+        public let extraBody: [String: TypedValue]?
 
         public init(
             name: String,
             maxTokens: Int? = nil,
             supportsTools: Bool? = nil,
             supportsVision: Bool? = nil,
-            parameters: [String: String]? = nil)
+            parameters: [String: String]? = nil,
+            extraBody: [String: TypedValue]? = nil)
         {
             self.name = name
             self.maxTokens = maxTokens
             self.supportsTools = supportsTools
             self.supportsVision = supportsVision
             self.parameters = parameters
+            self.extraBody = extraBody
         }
     }
 }

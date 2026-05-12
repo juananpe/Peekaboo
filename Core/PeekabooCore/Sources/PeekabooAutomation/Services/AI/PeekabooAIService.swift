@@ -327,7 +327,8 @@ public final class PeekabooAIService {
         }
 
         let model = provider.models?[modelString]
-        let resolvedModelID = model?.name ?? modelString
+        // modelString is the API-facing model ID (e.g. "qwen3.6-plus"); model?.name is the display label
+        let resolvedModelID = modelString
         let kind: PeekabooCustomProviderModel.Kind = switch provider.type {
         case .openai: .openai
         case .anthropic: .anthropic
